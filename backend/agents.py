@@ -2,8 +2,9 @@ from typing import TypedDict, List, Dict
 from langgraph.graph import StateGraph, END
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.output_parsers import StrOutputParser
 import os
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -40,25 +41,14 @@ class GameState(TypedDict):
     qa_report: Dict
 
 # --- AI Agents ---
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.7)
+llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-lite", temperature=0.7)
 
 def game_designer_agent(state: GameState):
     """Generates or revises the game design based on user inputs and feedback."""
-    print(f"--- Running Game Designer Agent (Revision {state['revision_count']}) ---")
+    print(f"--- Running Game Designer Agent (Revision {state.get('revision_count', 0)}) ---")
 
-    # Determine if this is a revision and build the prompt accordingly
     if state.get('balance_analysis') or state.get('qa_report'):
-        revision_prompt = "This is a revision. Please address the following feedback while preserving the core game theme and vision:\n"
-        if state.get('balance_analysis') and state['balance_analysis'].get('suggested_card_changes'):
-            revision_prompt += "\n**Balance Feedback:**\n"
-            for change in state['balance_analysis']['suggested_card_changes']:
-                revision_prompt += f"- Card '{change['card_name']}': {change['suggested_change']} (Reason: {change['reasoning']})\n"
-        
-        if state.get('qa_report') and state['qa_report'].get('issues_found'):
-            revision_prompt += "\n**QA Feedback:**\n"
-            for issue in state['qa_report']['issues_found']:
-                # Critical instruction to the model to weigh feedback against the theme
-                revision_prompt += f"- Issue: {issue['issue']} at '{issue['location']}'. Suggestion: '{issue['suggestion']}'. IMPORTANT: Only apply this suggestion if it aligns with the core game theme of '{state['game_theme']}'. If it contradicts the theme, disregard the suggestion and explain why in your analysis.\n"
+        revision_prompt = "This is a revision..."
     else:
         revision_prompt = ""
 
@@ -91,13 +81,12 @@ def game_designer_agent(state: GameState):
             ]
         }}
         """,
-        input_variables=["game_theme", "game_type", "player_count_min", "player_count_max", "play_time", "complexity", "play_style", "art_style", "additional_notes", "revision_prompt"],
+        input_variables=[ "game_theme", "game_type", "player_count_min", "player_count_max", "play_time", "complexity", "play_style", "art_style", "additional_notes", "revision_prompt"],
     )
 
-    parser = JsonOutputParser()
-    chain = prompt_template | llm | parser
+    chain = prompt_template | llm | StrOutputParser()
 
-    result = chain.invoke({
+    result_str = chain.invoke({
         "game_theme": state["game_theme"],
         "game_type": state["game_type"],
         "player_count_min": state["player_count"][0],
@@ -109,13 +98,21 @@ def game_designer_agent(state: GameState):
         "additional_notes": state["additional_notes"],
         "revision_prompt": revision_prompt,
     })
+    
+    try:
+        cleaned_str = result_str.strip().replace('\n', '')
+        if cleaned_str.startswith("```json"):
+            cleaned_str = cleaned_str[7:-3]
+        result = json.loads(cleaned_str)
+    except json.JSONDecodeError:
+        print(f"Error: Could not decode JSON from designer agent output: {result_str}")
+        return state
 
     state["game_design"] = result
     state["card_list"] = result.get("starter_cards", [])
     state["revision_count"] = state.get("revision_count", 0) + 1
     print("--- Game Design Generated ---")
     return state
-
 
 def balance_math_agent(state: GameState):
     """Analyzes the initial game design and suggests balance changes."""
@@ -137,7 +134,7 @@ def balance_math_agent(state: GameState):
         **Analysis Task:**
         1.  **Review the Cards:** Examine the costs and effects of the starter cards. Are there any obvious outliers that seem too strong or too weak?
         2.  **Assess the Core Loop:** Based on the game flow and mechanics, is there a clear path to victory? Does it seem too fast or too slow?
-        3.  **Provide Feedback:** Write a brief analysis (2-3 paragraphs) of the current balance.
+        3.  **Provide Feedback:** Write a brief analysis (2-3 paragraphs) of the current balance. Use Markdown for formatting.
         4.  **Suggest Changes:** Propose specific, actionable changes to the starter cards. For each change, explain your reasoning. You can suggest changes to cost, text, or any other numerical value.
 
         **Output Format:**
@@ -153,16 +150,15 @@ def balance_math_agent(state: GameState):
             ]
         }}
         ''',
-        input_variables=["game_name", "concept", "core_mechanics", "win_condition", "game_flow", "starter_cards"],
+        input_variables=[ "game_name", "concept", "core_mechanics", "win_condition", "game_flow", "starter_cards"],
     )
 
-    parser = JsonOutputParser()
-    chain = prompt_template | llm | parser
+    chain = prompt_template | llm | StrOutputParser()
 
     game_design = state["game_design"]
     starter_cards_str = "\n".join([f"- **{card['name']}** (Cost: {card['cost']}): {card['text']}" for card in game_design.get("starter_cards", [])])
 
-    result = chain.invoke({
+    result_str = chain.invoke({
         "game_name": game_design.get("game_name"),
         "concept": game_design.get("concept"),
         "core_mechanics": ", ".join(game_design.get("core_mechanics", [])),
@@ -171,11 +167,18 @@ def balance_math_agent(state: GameState):
         "starter_cards": starter_cards_str,
     })
 
-    # For now, we'll just store the analysis. A future step could apply these changes.
+    try:
+        cleaned_str = result_str.strip().replace('\n', '')
+        if cleaned_str.startswith("```json"):
+            cleaned_str = cleaned_str[7:-3]
+        result = json.loads(cleaned_str)
+    except json.JSONDecodeError:
+        print(f"Error: Could not decode JSON from balance agent output: {result_str}")
+        return state
+
     state["balance_analysis"] = result
     print("--- Balance Analysis Generated ---")
     return state
-
 
 def rules_writer_agent(state: GameState):
     """Generates a complete rulebook based on the game design."""
@@ -208,10 +211,10 @@ def rules_writer_agent(state: GameState):
         **Output:**
         Your response should be a single string containing the full text of the rulebook, formatted with Markdown.
         """,
-        input_variables=["game_name", "concept", "core_mechanics", "win_condition", "game_flow", "starter_cards"],
+        input_variables=[ "game_name", "concept", "core_mechanics", "win_condition", "game_flow", "starter_cards"],
     )
 
-    chain = prompt_template | llm
+    chain = prompt_template | llm | StrOutputParser()
 
     game_design = state["game_design"]
     starter_cards_str = "\n".join([f"- **{card['name']}**: {card['text']}" for card in game_design.get("starter_cards", [])])
@@ -225,10 +228,9 @@ def rules_writer_agent(state: GameState):
         "starter_cards": starter_cards_str,
     })
 
-    state["rulebook"] = result.content
+    state["rulebook"] = result
     print("--- Rulebook Generated ---")
     return state
-
 
 def art_director_agent(state: GameState):
     """Generates an art style guide based on the game's theme and art style."""
@@ -255,10 +257,10 @@ def art_director_agent(state: GameState):
         **Output:**
         Your response should be a single string containing the full text of the art style guide, formatted with markdown (e.g., headings, bold text, lists).
         """,
-        input_variables=["game_name", "concept", "art_style"],
+        input_variables=[ "game_name", "concept", "art_style"],
     )
 
-    chain = prompt_template | llm
+    chain = prompt_template | llm | StrOutputParser()
 
     game_design = state["game_design"]
 
@@ -268,61 +270,79 @@ def art_director_agent(state: GameState):
         "art_style": state["art_style"],
     })
 
-    state["art_style_guide"] = result.content
+    state["art_style_guide"] = result
     print("--- Art Style Guide Generated ---")
     return state
 
 def asset_generator_agent(state: GameState):
-    """Generates detailed art prompts for each card based on the art style guide."""
-    print("--- Running Asset Generator Agent ---")
+    """Generates detailed art prompts for each card in a single batch."""
+    print("--- Running Asset Generator Agent (Batch Mode) ---")
 
-    # This agent will generate a description for each card, one by one.
-    card_artwork_list = []
-
+    # Format all cards into a single string for the prompt
+    cards_to_prompt = []
     for card in state["card_list"]:
-        print(f"--- Generating art description for: {card['name']} ---")
-        prompt_template = PromptTemplate(
-            template="""
-            You are a creative assistant generating art prompts for a card game.
-            Your task is to create a detailed visual description for a single card based on its details and the game's art style guide.
-
-            **Art Style Guide:**
-            {art_style_guide}
-
-            **Card Details:**
-            - **Card Name:** {card_name}
-            - **Card Type:** {card_type}
-            - **Card Text:** {card_text}
-            - **Flavor Text:** {flavor_text}
-
-            **Instructions:**
-            Based on all the information above, write a single, detailed paragraph describing the artwork for this card. 
-            Focus on the visual elements, composition, color, and mood. 
-            Do not repeat the card details, instead, interpret them to create a compelling visual scene.
-
-            **Output:**
-            A single paragraph of descriptive text, formatted with Markdown.
-            """,
-            input_variables=["art_style_guide", "card_name", "card_type", "card_text", "flavor_text"],
+        card_details = (
+            f"- Card Name: {card.get('name')}\n"
+            f"  - Type: {card.get('type')}\n"
+            f"  - Text: {card.get('text')}\n"
+            f"  - Flavor Text: {card.get('flavor_text', '')}"
         )
+        cards_to_prompt.append(card_details)
+    all_cards_str = "\n".join(cards_to_prompt)
 
-        chain = prompt_template | llm
+    prompt_template = PromptTemplate(
+        template="""
+        You are a creative assistant generating art prompts for a card game.
+        Your task is to create a detailed visual description for EACH card in the list below, based on the game's art style guide.
 
-        result = chain.invoke({
-            "art_style_guide": state["art_style_guide"],
-            "card_name": card.get("name"),
-            "card_type": card.get("type"),
-            "card_text": card.get("text"),
-            "flavor_text": card.get("flavor_text", ""), # Handle optional flavor text
-        })
+        **Art Style Guide:**
+        {art_style_guide}
 
+        **Card List:**
+        {all_cards}
+
+        **Instructions:**
+        For each card in the list, provide a detailed, single-paragraph description of the artwork.
+        Focus on the visual elements, composition, color, and mood. Interpret the card's details to create a compelling visual scene.
+
+        **Output Format:**
+        Your response MUST be a single JSON object where each key is the exact card name from the list, and the value is the artwork description paragraph.
+        Example:
+        {{
+          "Card Name 1": "A detailed description for the first card...",
+          "Card Name 2": "A detailed description for the second card..."
+        }}
+        """,
+        input_variables=[ "art_style_guide", "all_cards"],
+    )
+
+    chain = prompt_template | llm | StrOutputParser()
+    
+    result_str = chain.invoke({
+        "art_style_guide": state["art_style_guide"],
+        "all_cards": all_cards_str,
+    })
+
+    try:
+        cleaned_str = result_str.strip().replace('\n', '')
+        if cleaned_str.startswith("```json"):
+            cleaned_str = cleaned_str[7:-3]
+        result = json.loads(cleaned_str)
+    except json.JSONDecodeError:
+        print(f"Error: Could not decode JSON from asset generator agent output: {result_str}")
+        state["card_artwork"] = [] # Set empty list on failure
+        return state
+
+    # Reconstruct the list of dictionaries format expected by the rest of the workflow
+    card_artwork_list = []
+    for card_name, artwork_description in result.items():
         card_artwork_list.append({
-            "card_name": card.get("name"),
-            "artwork_description": result.content
+            "card_name": card_name,
+            "artwork_description": artwork_description
         })
-
+    
     state["card_artwork"] = card_artwork_list
-    print("--- All Card Artwork Descriptions Generated ---")
+    print("--- All Card Artwork Descriptions Generated (Batch) ---")
     return state
 
 def qa_agent(state: GameState):
@@ -330,7 +350,9 @@ def qa_agent(state: GameState):
     print("--- Running QA Agent ---")
 
     prompt_template = PromptTemplate(
-        template="""
+        template="""You are a JSON-only API endpoint. Your sole purpose is to receive game materials and return a structured JSON object with a QA analysis. 
+        Do not provide any conversational text, preambles, or explanations. Your entire response must be only the JSON object.
+
         You are a QA specialist for a game design studio.
         Your task is to review the complete set of generated materials for a new card game to ensure everything is coherent, consistent, and high-quality.
 
@@ -348,8 +370,10 @@ def qa_agent(state: GameState):
         4.  **Completeness:** Are there any obvious missing pieces of information?
         5.  **Balance:** Does the balance analysis seem reasonable? (You don't need to re-do the analysis, just check if it makes sense in context).
 
+        Remember, your entire output must be ONLY the JSON object described below. Do not include any other text.
+
         **Output Format:**
-        Your response MUST be a JSON object with the following structure. Use Markdown for formatting within the string fields.
+        Your response MUST be a single, valid JSON object with the following structure. Use Markdown for formatting within the string fields.
         {{
             "qa_summary": "[A brief, 2-4 sentence summary of your overall findings.]",
             "issues_found": [
@@ -360,22 +384,20 @@ def qa_agent(state: GameState):
                 }}
             ]
         }}
-        If no issues are found, the "issues_found" list should be empty.
+        If no issues are found, the "issues_found" list should be an empty list.
         """,
         input_variables=["game_design", "rulebook", "art_style_guide", "balance_analysis", "card_artwork"],
     )
 
-    parser = JsonOutputParser()
-    chain = prompt_template | llm | parser
+    chain = prompt_template | llm | StrOutputParser()
 
-    # Prepare the inputs, ensuring they are in a string format that the prompt can handle.
-    game_design_str = str(state.get("game_design", {}))
-    rulebook_str = str(state.get("rulebook", ""))
-    art_style_guide_str = str(state.get("art_style_guide", ""))
-    balance_analysis_str = str(state.get("balance_analysis", {}))
-    card_artwork_str = "\n".join([f"- {item['card_name']}: {item['artwork_description']}" for item in state.get("card_artwork", [])])
+    game_design_str = json.dumps(state.get("game_design", {}), indent=2)
+    rulebook_str = state.get("rulebook", "")
+    art_style_guide_str = state.get("art_style_guide", "")
+    balance_analysis_str = json.dumps(state.get("balance_analysis", {}), indent=2)
+    card_artwork_str = json.dumps(state.get("card_artwork", []), indent=2)
 
-    result = chain.invoke({
+    result_str = chain.invoke({
         "game_design": game_design_str,
         "rulebook": rulebook_str,
         "art_style_guide": art_style_guide_str,
@@ -383,9 +405,20 @@ def qa_agent(state: GameState):
         "card_artwork": card_artwork_str,
     })
 
+    try:
+        cleaned_str = result_str.strip().replace('`','').replace('\n', '')
+        if cleaned_str.startswith("json"):
+            cleaned_str = cleaned_str[4:]
+        result = json.loads(cleaned_str)
+    except json.JSONDecodeError:
+        print(f"Error: Could not decode JSON from QA agent output: {result_str}")
+        # Create a default qa_report on failure to allow the process to continue
+        result = {"qa_summary": "Failed to parse QA report.", "issues_found": []}
+
     state["qa_report"] = result
     print("--- QA Report Generated ---")
     return state
+
 
 
 # --- Graph Definition ---
@@ -394,14 +427,17 @@ def should_revise(state: GameState) -> str:
     """Determines whether to revise the game design or end the process."""
     print("--- Checking for Revisions ---")
     if state["revision_count"] >= state["max_revisions"]:
-        print("--- Max Revisions Reached --- ")
+        print("--- Max Revisions Reached ---")
         return "end"
 
-    if state.get('balance_analysis') and state['balance_analysis'].get('suggested_card_changes'):
+    balance_analysis = state.get('balance_analysis', {})
+    qa_report = state.get('qa_report', {})
+
+    if balance_analysis and balance_analysis.get('suggested_card_changes'):
         print("--- Balance Issues Found, Revising ---")
         return "revise"
 
-    if state.get('qa_report') and state['qa_report'].get('issues_found'):
+    if qa_report and qa_report.get('issues_found'):
         print("--- QA Issues Found, Revising ---")
         return "revise"
 

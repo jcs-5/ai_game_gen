@@ -1,4 +1,3 @@
-
 import React from "react";
 import {
   Card,
@@ -23,7 +22,7 @@ import { Slider } from "@/components/ui/slider";
 import GeneratedGame from "@/components/GeneratedGame";
 import { dummyGameState } from "@/lib/dummy-data"; // Import the dummy data
 
-const USE_DUMMY_DATA = true; // Set to true to use dummy data
+const USE_DUMMY_DATA = false; // Set to true to use dummy data
 
 function App() {
   const [playerCount, setPlayerCount] = React.useState<[number, number]>([2, 4]);
@@ -83,7 +82,7 @@ function App() {
         body: JSON.stringify({
           game_theme: gameTheme,
           game_type: gameType,
-          player_count: playerCount,
+          player_count: [playerCount[0], playerCount[1]],
           play_time: playTime,
           complexity: complexity,
           play_style: playStyle,
