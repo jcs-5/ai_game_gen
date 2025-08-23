@@ -59,9 +59,9 @@ class ArtStyleGuide(BaseModel):
     art_style_guide: str = Field(description="The complete art style guide in Markdown format.")
 
 class CardArt(BaseModel):
-    artwork_description: str
-    title_font: str
-    body_font: str
+    artwork_description: str = Field(alias="artwork description")
+    title_font: str = Field(alias="title font")
+    body_font: str = Field(alias="body font")
     iconography: List[str]
 
     @field_validator('iconography', mode='before')
@@ -137,11 +137,10 @@ def game_designer_agent(state: GameState):
     """
 
     if model_provider == "ollama":
-        parser = JsonOutputParser(pydantic_object=GameDesign)
-        prompt_template = PromptTemplate.from_template(prompt + "\n{format_instructions}")
-        prompt_template.partial_variables={"format_instructions": parser.get_format_instructions()}
-        chain = prompt_template | llm | parser
-        result = chain.invoke({})
+        prompt_with_json_instructions = prompt + "\n\nYour response must be in JSON format."
+        result_str = llm.invoke(prompt_with_json_instructions).content
+        result_dict = json.loads(result_str)
+        result = GameDesign.model_validate(result_dict)
     else:
         structured_llm = llm.with_structured_output(GameDesign)
         result = structured_llm.invoke(prompt)
@@ -174,11 +173,10 @@ def balance_math_agent(state: GameState):
     """
 
     if model_provider == "ollama":
-        parser = JsonOutputParser(pydantic_object=BalanceAnalysis)
-        prompt_template = PromptTemplate.from_template(prompt + "\n{format_instructions}")
-        prompt_template.partial_variables={"format_instructions": parser.get_format_instructions()}
-        chain = prompt_template | llm | parser
-        result = chain.invoke({})
+        prompt_with_json_instructions = prompt + "\n\nYour response must be in JSON format."
+        result_str = llm.invoke(prompt_with_json_instructions).content
+        result_dict = json.loads(result_str)
+        result = BalanceAnalysis.model_validate(result_dict)
     else:
         structured_llm = llm.with_structured_output(BalanceAnalysis)
         result = structured_llm.invoke(prompt)
@@ -220,11 +218,10 @@ def rules_writer_agent(state: GameState):
     """
 
     if model_provider == "ollama":
-        parser = JsonOutputParser(pydantic_object=Rulebook)
-        prompt_template = PromptTemplate.from_template(prompt + "\n{format_instructions}")
-        prompt_template.partial_variables={"format_instructions": parser.get_format_instructions()}
-        chain = prompt_template | llm | parser
-        result = chain.invoke({})
+        prompt_with_json_instructions = prompt + "\n\nYour response must be in JSON format."
+        result_str = llm.invoke(prompt_with_json_instructions).content
+        result_dict = json.loads(result_str)
+        result = Rulebook.model_validate(result_dict)
     else:
         structured_llm = llm.with_structured_output(Rulebook)
         result = structured_llm.invoke(prompt)
@@ -259,11 +256,10 @@ def art_director_agent(state: GameState):
     """
 
     if model_provider == "ollama":
-        parser = JsonOutputParser(pydantic_object=ArtStyleGuide)
-        prompt_template = PromptTemplate.from_template(prompt + "\n{format_instructions}")
-        prompt_template.partial_variables={"format_instructions": parser.get_format_instructions()}
-        chain = prompt_template | llm | parser
-        result = chain.invoke({})
+        prompt_with_json_instructions = prompt + "\n\nYour response must be in JSON format."
+        result_str = llm.invoke(prompt_with_json_instructions).content
+        result_dict = json.loads(result_str)
+        result = ArtStyleGuide.model_validate(result_dict)
     else:
         structured_llm = llm.with_structured_output(ArtStyleGuide)
         result = structured_llm.invoke(prompt)
@@ -321,11 +317,10 @@ def asset_generator_agent(state: GameState):
     """
 
     if model_provider == "ollama":
-        parser = JsonOutputParser(pydantic_object=CardArtwork)
-        prompt_template = PromptTemplate.from_template(prompt + "\n{format_instructions}")
-        prompt_template.partial_variables={"format_instructions": parser.get_format_instructions()}
-        chain = prompt_template | llm | parser
-        result = chain.invoke({})
+        prompt_with_json_instructions = prompt + "\n\nYour response must be in JSON format."
+        result_str = llm.invoke(prompt_with_json_instructions).content
+        result_dict = json.loads(result_str)
+        result = CardArtwork.model_validate(result_dict)
     else:
         result_str = llm.invoke(prompt).content
         print(f"Asset Generator Agent Raw Result: {result_str}")
@@ -366,11 +361,10 @@ def qa_agent(state: GameState):
     """
 
     if model_provider == "ollama":
-        parser = JsonOutputParser(pydantic_object=QAReport)
-        prompt_template = PromptTemplate.from_template(prompt + "\n{format_instructions}")
-        prompt_template.partial_variables={"format_instructions": parser.get_format_instructions()}
-        chain = prompt_template | llm | parser
-        result = chain.invoke({})
+        prompt_with_json_instructions = prompt + "\n\nYour response must be in JSON format."
+        result_str = llm.invoke(prompt_with_json_instructions).content
+        result_dict = json.loads(result_str)
+        result = QAReport.model_validate(result_dict)
     else:
         structured_llm = llm.with_structured_output(QAReport)
         result = structured_llm.invoke(prompt)
