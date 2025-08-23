@@ -33,6 +33,7 @@ function App() {
   const [playStyle, setPlayStyle] = React.useState("");
   const [artStyle, setArtStyle] = React.useState("");
   const [additionalNotes, setAdditionalNotes] = React.useState("");
+  const [modelProvider, setModelProvider] = React.useState("gemini"); // New state for AI model provider
 
   const [loading, setLoading] = React.useState(false);
   const [generatedGame, setGeneratedGame] = React.useState(null);
@@ -88,6 +89,7 @@ function App() {
           play_style: playStyle,
           art_style: artStyle,
           additional_notes: additionalNotes,
+          model_provider: modelProvider, // Added model_provider
         }),
       });
 
@@ -201,6 +203,18 @@ function App() {
             <div className="grid gap-2">
               <Label htmlFor="additional-notes">Additional Notes</Label>
               <Textarea id="additional-notes" placeholder="Any other details or specific requests..." value={additionalNotes} onChange={(e) => setAdditionalNotes(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="ai-model">AI Model Provider</Label>
+              <Select onValueChange={setModelProvider} value={modelProvider}>
+                <SelectTrigger id="ai-model">
+                  <SelectValue placeholder="Select AI Model" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gemini">Gemini (Google)</SelectItem>
+                  <SelectItem value="ollama">Ollama (Local)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Generating..." : "Generate Game"}

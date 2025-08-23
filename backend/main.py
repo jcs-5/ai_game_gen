@@ -29,13 +29,17 @@ class GameParameters(BaseModel):
     play_style: str
     art_style: str
     additional_notes: str
+    model_provider: str = "gemini" # New field for AI model selection
+
+import os # Added import for os
 
 # In-memory storage for job status and results
 job_storage: Dict[str, Dict] = {}
 
 def run_agent_workflow(job_id: str, params: dict):
     """Helper function to run the agent workflow in the background."""
-    print(f"--- Starting Agent Workflow for job {job_id} ---")
+    model_provider = params.get("model_provider", "gemini")
+    print(f"--- Starting Agent Workflow for job {job_id} using {model_provider} model ---")
     job_storage[job_id] = {"status": "running", "result": None}
     try:
         final_state = agent_app.invoke(params)
@@ -50,7 +54,7 @@ def generate_game(params: GameParameters, background_tasks: BackgroundTasks):
     job_id = str(uuid.uuid4())
     initial_state = params.dict()
     initial_state["revision_count"] = 0
-    initial_state["max_revisions"] = 3 # Set the max number of revisions
+    initial_state["max_revisions"] = 1 # Set the max number of revisions
     background_tasks.add_task(run_agent_workflow, job_id, initial_state)
     return {"job_id": job_id}
 
