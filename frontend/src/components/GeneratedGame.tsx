@@ -90,17 +90,20 @@ const GeneratedGame: React.FC<GeneratedGameProps> = ({ gameState }) => {
           </AccordionItem>
         )}
 
-        {card_artwork && Object.keys(card_artwork).length > 0 && (
+        {card_artwork && card_artwork.artwork && Object.keys(card_artwork.artwork).length > 0 && (
           <AccordionItem value="card-artwork">
             <AccordionTrigger className='text-xl font-bold'>Card Artwork Descriptions</AccordionTrigger>
             <AccordionContent>
                 <Card>
                     <CardContent className='pt-6'>
                         <ul className='list-disc pl-5'>
-                        {Object.keys(card_artwork).map((cardName) => (
+                        {Object.keys(card_artwork.artwork).map((cardName) => (
                             <li key={cardName} className='mb-2'>
                             <strong>{cardName}:</strong>
-                            <ReactMarkdown rehypePlugins={[rehypeRaw]}>{card_artwork[cardName]}</ReactMarkdown>
+                            <ReactMarkdown rehypePlugins={[rehypeRaw]}>{card_artwork.artwork[cardName].artwork_description}</ReactMarkdown>
+                            <p className='text-sm text-muted-foreground'>Title Font: {card_artwork.artwork[cardName].title_font}</p>
+                            <p className='text-sm text-muted-foreground'>Body Font: {card_artwork.artwork[cardName].body_font}</p>
+                            <p className='text-sm text-muted-foreground'>Iconography: {card_artwork.artwork[cardName].iconography.join(', ')}</p>
                             </li>
                         ))}
                         </ul>

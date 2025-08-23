@@ -4,7 +4,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 import os
 import json
 from dotenv import load_dotenv
@@ -58,6 +58,21 @@ class Rulebook(BaseModel):
 class ArtStyleGuide(BaseModel):
     art_style_guide: str = Field(description="The complete art style guide in Markdown format.")
 
+class CardArt(BaseModel):
+    artwork_description: str
+    title_font: str
+    body_font: str
+    iconography: List[str]
+
+    @field_validator('iconography', mode='before')
+    def coerce_to_list(cls, v):
+        if isinstance(v, str):
+            return [v]
+        return v
+
+class CardArtwork(BaseModel):
+    artwork: Dict[str, CardArt]
+
 
 # --- Agent State ---
 class GameState(TypedDict):
@@ -81,7 +96,7 @@ class GameState(TypedDict):
     rulebook: Optional[Rulebook]
     card_list: List[StarterCard]
     art_style_guide: Optional[ArtStyleGuide]
-    card_artwork: Dict[str, str]
+    card_artwork: Optional[CardArtwork]
     balance_analysis: Optional[BalanceAnalysis]
     qa_report: Optional[QAReport]
 
@@ -276,13 +291,33 @@ def asset_generator_agent(state: GameState):
 
     prompt = f"""You are a creative assistant generating art prompts for a card game.
     Your task is to create a detailed visual description for EACH card in the list below, based on the game's art style guide.
-    Your output should be a JSON object where each key is the card name and the value is the artwork description.
+    Your output should be a JSON object where each key is the card name and the value is an object containing the artwork description, title font, body font, and iconography.
+    The keys for the inner object must be "artwork_description", "title_font", "body_font", and "iconography".
+    The iconography field should always be a list of strings, even if there is only one item.
 
     **Art Style Guide:**
     {state["art_style_guide"].art_style_guide}
 
     **Card List:**
     {all_cards_str}
+
+    **Example Output:**
+    ```json
+    {{
+      "Card Name 1": {{
+        "artwork_description": "A detailed description of the artwork.",
+        "title_font": "A font name",
+        "body_font": "A font name",
+        "iconography": ["icon1", "icon2"]
+      }},
+      "Card Name 2": {{
+        "artwork_description": "A detailed description of the artwork.",
+        "title_font": "A font name",
+        "body_font": "A font name",
+        "iconography": ["icon3"]
+      }}
+    }}
+    ```
     """
 
     if model_provider == "ollama":
@@ -300,7 +335,9 @@ def asset_generator_agent(state: GameState):
             # The output might have markdown ```json ... ```, so we need to extract the json part
             if "```json" in result_str:
                 result_str = result_str.split("```json")[1].split("```")[0]
-            result = json.loads(result_str)
+            result_dict = json.loads(result_str)
+            # Wrap the dictionary in another dictionary with the key "artwork"
+            result = CardArtwork.model_validate({"artwork": result_dict})
         except (json.JSONDecodeError, ValidationError) as e:
             print(f"Error parsing asset generator agent result: {e}")
             # Handle the error appropriately, maybe by returning a default value or raising an exception
@@ -325,7 +362,7 @@ def qa_agent(state: GameState):
     - **Rulebook:** {json.dumps(state["rulebook"].model_dump())}
     - **Art Style Guide:** {json.dumps(state["art_style_guide"].model_dump())}
     - **Balance Analysis:** {json.dumps(state["balance_analysis"].model_dump())}
-    - **Card Art Prompts:** {json.dumps(state["card_artwork"])}
+    - **Card Art Prompts:** {json.dumps(state["card_artwork"].model_dump())}
     """
 
     if model_provider == "ollama":
