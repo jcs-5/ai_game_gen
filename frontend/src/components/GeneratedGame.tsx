@@ -48,7 +48,7 @@ const GeneratedGame: React.FC<GeneratedGameProps> = ({ gameState }) => {
             <AccordionContent>
                 <Card>
                     <CardContent className='pt-6'>
-                        <ReactMarkdown rehypePlugins={[rehypeRaw]}>{rulebook}</ReactMarkdown>
+                        <ReactMarkdown rehypePlugins={[rehypeRaw]}>{rulebook.rulebook}</ReactMarkdown>
                     </CardContent>
                 </Card>
             </AccordionContent>
@@ -61,7 +61,7 @@ const GeneratedGame: React.FC<GeneratedGameProps> = ({ gameState }) => {
             <AccordionContent>
                 <Card>
                     <CardContent className='pt-6'>
-                        <ReactMarkdown rehypePlugins={[rehypeRaw]}>{art_style_guide}</ReactMarkdown>
+                        <ReactMarkdown rehypePlugins={[rehypeRaw]}>{art_style_guide.art_style_guide}</ReactMarkdown>
                     </CardContent>
                 </Card>
             </AccordionContent>
@@ -90,17 +90,20 @@ const GeneratedGame: React.FC<GeneratedGameProps> = ({ gameState }) => {
           </AccordionItem>
         )}
 
-        {card_artwork && card_artwork.length > 0 && (
+        {card_artwork && card_artwork.artwork && Object.keys(card_artwork.artwork).length > 0 && (
           <AccordionItem value="card-artwork">
             <AccordionTrigger className='text-xl font-bold'>Card Artwork Descriptions</AccordionTrigger>
             <AccordionContent>
                 <Card>
                     <CardContent className='pt-6'>
                         <ul className='list-disc pl-5'>
-                        {card_artwork.map((artwork: any) => (
-                            <li key={artwork.card_name} className='mb-2'>
-                            <strong>{artwork.card_name}:</strong>
-                            <ReactMarkdown rehypePlugins={[rehypeRaw]}>{artwork.artwork_description}</ReactMarkdown>
+                        {Object.keys(card_artwork.artwork).map((cardName) => (
+                            <li key={cardName} className='mb-2'>
+                            <strong>{cardName}:</strong>
+                            <ReactMarkdown rehypePlugins={[rehypeRaw]}>{card_artwork.artwork[cardName].artwork_description}</ReactMarkdown>
+                            <p className='text-sm text-muted-foreground'>Title Font: {card_artwork.artwork[cardName].title_font}</p>
+                            <p className='text-sm text-muted-foreground'>Body Font: {card_artwork.artwork[cardName].body_font}</p>
+                            <p className='text-sm text-muted-foreground'>Iconography: {card_artwork.artwork[cardName].iconography.join(', ')}</p>
                             </li>
                         ))}
                         </ul>
